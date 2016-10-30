@@ -10,6 +10,8 @@ import akka.wamp.Validator
 import akka.wamp.{messages => wamp}
 import org.slf4j.LoggerFactory
 
+import scala.concurrent.Future
+
 /**
   * The JSON serialization flows
   * 
@@ -50,12 +52,13 @@ class JsonSerializationFlows(validateStrictUri: Boolean, dropOffendingMessages: 
     */
   val deserialize: Flow[websocket.Message, wamp.Message, NotUsed] =
     Flow[websocket.Message]
-      .map {
+      .mapAsync(1) {
         case TextMessage.Strict(text) =>
-          serialization.deserialize(Source.single(text))
+          Future.successful(serialization.deserialize(Source.single(text)))
 
         case TextMessage.Streamed(source) =>
-          serialization.deserialize(source)
+          source.runReduce(_ + _).map ( str => serialization.deserialize(Source.single(str)))
+          //serialization.deserialize(source)
 
         case bm: BinaryMessage =>
           // ignore binary messages but drain content to avoid the stream being clogged
